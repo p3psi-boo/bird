@@ -64,7 +64,7 @@ static inline int channel_is_active(struct channel *c)
 { return (c->channel_state == CS_START) || (c->channel_state == CS_UP); }
 
 static inline int channel_reloadable(struct channel *c)
-{ return c->proto->reload_routes && c->reloadable; }
+{return c->proto->reload_routes && c->reloadable; }
 
 static inline void
 channel_log_state_change(struct channel *c)
@@ -375,6 +375,7 @@ channel_roa_subscribe(struct channel *c, rtable *tab, int dir)
   add_tail(&c->roa_subscriptions, &s->roa_node);
 }
 
+
 static void
 channel_roa_unsubscribe(struct roa_subscription *s)
 {
@@ -422,6 +423,11 @@ channel_roa_subscribe_filter(struct channel *c, int dir)
       found = 1;
       break;
 
+    case FI_ASPA_CHECK_EXPLICIT:
+      tab = fi->i_FI_ASPA_CHECK_EXPLICIT.rtc->table;
+      if (valid) channel_roa_subscribe(c, tab, dir);
+      found = 1;
+      break;
     default:
       break;
     }
