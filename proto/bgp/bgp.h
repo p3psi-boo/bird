@@ -290,6 +290,15 @@ struct bgp_stats {
   uint fsm_established_transitions;
 };
 
+struct journal_bgp_conn {
+  u8 state;
+
+  byte *local_open_msg;
+  byte *remote_open_msg;
+  uint local_open_length;
+  uint remote_open_length;
+};
+
 struct bgp_conn {
   struct bgp_proto *bgp;
   struct birdsock *sk;

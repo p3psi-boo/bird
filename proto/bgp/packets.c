@@ -2463,7 +2463,6 @@ bgp_create_update_bmp(struct bgp_channel *c, byte *buf, struct bgp_bucket *buck,
 
   struct bgp_write_state s = {
     .proto = p,
-    .channel = c,
     .pool = tmp_linpool,
     .mp_reach = (c->afi != BGP_AF_IPV4) || rem->ext_next_hop,
     .as4_session = 1,
@@ -2517,13 +2516,14 @@ bgp_bmp_encode_rte(struct bgp_channel *c, byte *buf, const net_addr *n,
   init_list(&b->prefixes);
 
   if (attrs)
-    memcpy(b->eattrs, attrs, ea_size);
+    memcpy(b->attrs, attrs, ea_size);
 
   /* Temporary prefix */
   struct bgp_prefix *px = tmp_allocz(prefix_size);
-  px->path_id = (u32) src->private_id;
-  net_copy(px->net, n);
-  add_tail(&b->prefixes, &px->buck_node_xx);
+  px->src = tmp_allocz(sizeof(struct rte_src));
+  memcpy(px->src, src, sizeof(struct rte_src));
+  //FIXME net_copy(px->net, n);
+  add_tail(&b->prefixes, &px->buck_node); // why was there _xx ?
 
   byte *end = bgp_create_update_bmp(c, pkt, b, !!new);
 

@@ -174,7 +174,7 @@ struct proto {
   btime last_state_change;		/* Time of last state transition */
   char *last_state_name_announced;	/* Last state name we've announced to the user */
   char *message;			/* State-change message, allocated from proto_pool */
-  u32 id;                   /* Id of the protocol indexing its position in proto_attributes */
+  u32 id;                   /* Id of the protocol indexing its position in proto_state_table */
 
   /*
    *	General protocol hooks:
@@ -262,7 +262,13 @@ void channel_show_limit(struct limit *l, const char *dsc, int active, int action
 void channel_show_info(struct channel *c);
 void channel_cmd_debug(struct channel *c, uint mask);
 
-void proto_cmd_show(struct proto *, uintptr_t, int);
+union cmd_arg {
+  int verbose;
+  struct proto_reload_request *prr;
+  char *msg;
+};
+
+void proto_cmd_show(struct proto *, union cmd_arg verbose, int);
 void proto_cmd_disable(struct proto *, uintptr_t, int);
 void proto_cmd_enable(struct proto *, uintptr_t, int);
 void proto_cmd_restart(struct proto *, uintptr_t, int);
@@ -271,6 +277,7 @@ void proto_cmd_debug(struct proto *, uintptr_t, int);
 void proto_cmd_mrtdump(struct proto *, uintptr_t, int);
 
 void proto_apply_cmd(struct proto_spec ps, void (* cmd)(struct proto *, uintptr_t, int), int restricted, uintptr_t arg);
+void proto_apply_cmd_no_lock(struct proto_spec ps, void (* cmd)(struct proto *, union cmd_arg, int), int restricted, union cmd_arg arg);
 struct proto *proto_get_named(struct symbol *, struct protocol *);
 struct proto *proto_iterate_named(struct symbol *sym, struct protocol *proto, struct proto *old);
 
@@ -397,12 +404,20 @@ static inline int proto_is_inactive(struct proto *p)
 
 struct proto_attrs {
   ea_list *_Atomic *attrs;
+  list *channels_attrs;
   _Atomic u32 length;
   struct hmap *proto_id_maker;
+  struct hmap *channel_id_maker;
 };
 
 extern struct lfjour *proto_journal;
-extern struct proto_attrs *proto_attributes;
+extern struct lfjour *channel_journal;
+extern struct proto_attrs *proto_state_table;
+
+struct channel_attrs {
+  node n;
+  ea_list *_Atomic *attrs;
+};
 
 struct proto_pending_update {
   LFJOUR_ITEM_INHERIT(li);
@@ -411,10 +426,20 @@ struct proto_pending_update {
   struct proto *protocol;
 };
 
-void proto_journal_state_changed(ea_list *attr, ea_list *old_attr, struct proto *p);
+struct channel_pending_update {
+  LFJOUR_ITEM_INHERIT(li);
+  ea_list *channel_attr;
+  ea_list *old_attr;
+  struct channel *channel;
+};
+
+void proto_journal_state_push(ea_list *attr, struct proto *p);
+void channel_journal_state_push(ea_list *attr, struct channel *ch);
 ea_list *proto_state_to_eattr(struct proto *p, int old_state, int protocol_deleting);
+struct channel_attrs *get_channel_ea(struct channel *ch);
 void create_dummy_recipient(void);
 void protos_attr_field_grow(void);
+ea_list *proto_get_state_list(int id);
 
 
 /*
@@ -550,6 +575,7 @@ struct channel {
   node n;				/* Node in proto->channels */
 
   const char *name;			/* Channel name (may be NULL) */
+  int id;
   const struct channel_class *class;
   struct proto *proto;
 
@@ -685,6 +711,7 @@ static inline struct channel_config *proto_cf_mpls_channel(struct proto_config *
 struct channel *proto_find_channel_by_table(struct proto *p, rtable *t);
 struct channel *proto_find_channel_by_name(struct proto *p, const char *n);
 struct channel *proto_add_channel(struct proto *p, struct channel_config *cf);
+struct channel *proto_add_main_channel(struct proto *p, struct channel_config *cf);
 void proto_remove_channel(struct proto *p, struct channel *c);
 int proto_configure_channel(struct proto *p, struct channel **c, struct channel_config *cf);
 

@@ -1416,12 +1416,14 @@ birdloop_init(void)
 
   main_birdloop.time.domain = the_bird_domain.the_bird;
   main_birdloop.time.loop = &main_birdloop;
+  main_birdloop.pool = rp_new(&root_pool, the_bird_domain.the_bird, "Main loop");
 
   times_update();
   timers_init(&main_birdloop.time, &root_pool);
 
   birdloop_enter_locked(&main_birdloop);
   this_birdloop = this_metaloop = &main_birdloop;
+
   this_thread = &main_thread;
 
   defer_init(lp_new(&root_pool));

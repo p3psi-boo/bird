@@ -68,6 +68,7 @@
       log(L_ERR "%s: " msg, s->proto->p.name, ## args);		\
   })
 
+extern struct proto_attrs *proto_state_table;
 
 /*
  *	MRT buffer code
@@ -381,10 +382,10 @@ mrt_peer_table_dump(struct mrt_table_dump_state *s)
   mrt_peer_table_entry(s, 0, 0, IPA_NONE);
 
 #ifdef CONFIG_BGP
-  for(u32 i = 0; i<proto_attributes->length; i++)
+  for(u32 i = 0; i<proto_state_table->length; i++)
   {
     rcu_read_lock();
-    ea_list *eal = proto_attributes->attrs[i];
+    ea_list *eal = proto_state_table->attrs[i];
     if (eal)
       ea_free_later(ea_ref(eal));
     else
@@ -393,14 +394,14 @@ mrt_peer_table_dump(struct mrt_table_dump_state *s)
       continue;
     }
     rcu_read_unlock();
-    eattr *name = ea_find(proto_attributes->attrs[i], &ea_proto_protocol_name);
-    eattr *state = ea_find(proto_attributes->attrs[i], &ea_proto_state);
-    if ((strcmp(name->u.ad->data, "BGP") == 0) && (state->u.i != PS_DOWN))
+    struct protocol **type = (struct protocol **)ea_get_adata(eal, &ea_protocol_type)->data;
+    int state = ea_get_int(eal, &ea_state, 0);
+    if ((*type == &proto_bgp) && (state != PS_DOWN))
     {
-      eattr *rem_id = ea_find(proto_attributes->attrs[i], &ea_proto_bgp_rem_id);
-      eattr *rem_as = ea_find(proto_attributes->attrs[i], &ea_proto_bgp_rem_as);
-      eattr *rem_ip = ea_find(proto_attributes->attrs[i], &ea_proto_bgp_rem_ip);
-      mrt_peer_table_entry(s, rem_id->u.i, rem_as->u.i, *((ip_addr*) rem_ip->u.ad->data));
+      int rem_id = ea_get_int(eal, &ea_bgp_rem_id, 0);
+      int rem_as = ea_get_int(eal, &ea_bgp_rem_as, 0);
+      ip_addr *rem_ip = (ip_addr *)ea_get_adata(eal, &ea_bgp_rem_ip)->data;
+      mrt_peer_table_entry(s, rem_id, rem_as, *rem_ip);
     }
   }
 #endif
@@ -789,6 +790,7 @@ mrt_bgp_buffer(void)
   static buffer b;
 
   ASSERT(this_metaloop);
+  log("loop in mrt %x, pool %i (main loop is %x, pool %i)", this_metaloop, this_metaloop->pool, &main_birdloop, main_birdloop.pool);
   ASSERT(this_metaloop->pool);
   if (!b.start)
     mrt_buffer_init(&b, this_metaloop->pool, 1024);

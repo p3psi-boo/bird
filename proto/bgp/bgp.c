@@ -2578,9 +2578,20 @@ void
 bgp_state_to_eattr(struct proto *P, ea_list *l, eattr *attributes)
 {
   struct bgp_proto *p = (struct bgp_proto *) P;
-  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_proto_bgp_rem_id, 0, p->remote_id);
-  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_proto_bgp_rem_as, 0, p->remote_as);
-  attributes[l->count++] = EA_LITERAL_STORE_ADATA(&ea_proto_bgp_rem_ip, 0, &p->remote_ip, sizeof(ip_addr));
+  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_rem_id, 0, p->remote_id);
+  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_rem_as, 0, p->remote_as);
+  attributes[l->count++] = EA_LITERAL_STORE_ADATA(&ea_bgp_rem_ip, 0, &p->remote_ip, sizeof(ip_addr));
+  if (p->conn)
+  {
+    struct journal_bgp_conn conn = {
+      .state = p->conn->state,
+      .local_open_msg = p->conn->local_open_msg,
+      .remote_open_msg = p->conn->remote_open_msg,
+      .local_open_length = p->conn->local_open_length,
+      .remote_open_length = p->conn->remote_open_length,
+    };
+    attributes[l->count++] = EA_LITERAL_STORE_ADATA(&ea_bgp_conn, 0, &conn, sizeof(struct journal_bgp_conn));
+  }
 }
 
 static void

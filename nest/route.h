@@ -883,6 +883,11 @@ struct hostentry_adata {
   u32 labels[0];
 };
 
+struct rtable_adata {
+  adata ad;
+  struct rtable *table;
+};
+
 #define HOSTENTRY_LABEL_COUNT(head)	(head->ad.length + sizeof(struct adata) - sizeof(struct hostentry_adata)) / sizeof(u32)
 
 void

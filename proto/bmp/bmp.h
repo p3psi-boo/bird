@@ -78,23 +78,24 @@ struct bmp_proto {
 };
 
 struct bmp_peer {
-  struct bgp_proto *bgp;
+  ea_list *bgp;
   struct bmp_peer *next;
   list streams;
 };
 
 struct bmp_stream {
   node n;
-  struct bgp_proto *bgp;
+  ea_list *bgp;
   u32 key;
   bool sync;
   struct bmp_stream *next;
   struct bmp_table *table;
-  struct bgp_channel *sender;
+  ea_list *sender;
+  int in_pre_policy;
 };
 
 struct bmp_table {
-  struct rtable *table;
+  rtable *table;
   struct bmp_table *next;
   struct channel *channel;
   u32 uc;

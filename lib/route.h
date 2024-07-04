@@ -467,11 +467,11 @@ extern struct ea_class ea_gen_mpls_label,
        ea_gen_mpls_policy, ea_gen_mpls_class;
 
 /* protocol journal attributes */
-extern struct ea_class ea_proto_name, ea_proto_protocol_name, ea_proto_table,
-       ea_proto_state, ea_proto_old_state, ea_proto_last_modified, ea_proto_info,
-       ea_proto_id, ea_proto_deleted;
+extern struct ea_class ea_name, ea_protocol_name, ea_protocol_type, ea_table,
+       ea_state, ea_old_state, ea_last_modified, ea_info, ea_proto_id,
+       ea_channel_id, ea_deleted, ea_bgp_conn, ea_rtable, ea_bgp_afi;
 /* bgp protocol journal attributes */
-extern struct ea_class ea_proto_bgp_rem_id, ea_proto_bgp_rem_as, ea_proto_bgp_rem_ip;
+extern struct ea_class ea_bgp_rem_id, ea_bgp_rem_as, ea_bgp_rem_ip;
 
 /* Source: An old method to devise the route source protocol and kind.
  * To be superseded in a near future by something more informative. */

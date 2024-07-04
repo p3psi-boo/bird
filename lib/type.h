@@ -98,6 +98,7 @@ enum btype {
   T_ENUM_ROA = 0x39,
   T_ENUM_NETTYPE = 0x3b,
   T_ENUM_AF = 0x3d,
+  T_RTABLE = 0x3e,
 
 /* new enums go here */
 
@@ -120,6 +121,8 @@ enum btype {
 /* protocol */
   T_ENUM_STATE = 0xd1,
   T_BTIME = 0xd4,
+  T_POINTER = 0xd8,
+  T_BGP_CONN = 0xcb,
 } PACKED;
 
 typedef enum btype btype;
