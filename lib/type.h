@@ -121,8 +121,6 @@ enum btype {
 /* protocol */
   T_ENUM_STATE = 0xd1,
   T_BTIME = 0xd4,
-  T_POINTER = 0xd8,
-  T_BGP_CONN = 0xcb,
 } PACKED;
 
 typedef enum btype btype;

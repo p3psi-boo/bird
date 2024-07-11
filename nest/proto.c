@@ -2503,7 +2503,7 @@ proto_cmd_show(struct proto *p, union cmd_arg verbose, int cnt)
       p->proto->get_status(p, buf);
   }
   const btime *time = (btime *)ea_get_adata(eal, &ea_last_modified)->data;
-  tm_format_time(tbuf, &config->tf_proto, *time);
+  tm_format_time(tbuf, &atomic_load_explicit(&global_runtime, memory_order_acquire)->tf_proto, *time); //todo readlock????
 
   cli_msg(-1002, "%-10s %-10s %-10s %-6s %-12s  %s",
 	  name,
@@ -2922,14 +2922,14 @@ proto_state_to_eattr(struct proto *p, int old_state, int proto_deleting)
 {
   struct {
 	ea_list l;
-	eattr a[15];
+	eattr a[9+9];
   } eattrs;
 
   eattrs.l = (ea_list) {};
 
   eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_STRING(&ea_name, 0, p->name);
   //eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_STRING(&ea_protocol_name, 0, p->proto->name); this info is stored in ea_protocol_type
-  eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_ADATA(&ea_protocol_type, 0, &p->proto, sizeof(struct protocol *));
+  eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_PTR(&ea_protocol_type, 0, p->proto);
   if (p->main_channel)
     eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_STRING(&ea_table, 0, p->main_channel->table->name);
   eattrs.a[eattrs.l.count++] = EA_LITERAL_EMBEDDED(&ea_state, 0, p->proto_state);
@@ -2954,10 +2954,7 @@ channel_state_to_eattr(struct channel *ch, int proto_deleting)
   eattrs.a[eattrs.l.count++] = EA_LITERAL_EMBEDDED(&ea_proto_id, 0, ch->proto->id);
   eattrs.a[eattrs.l.count++] = EA_LITERAL_EMBEDDED(&ea_deleted, 0, proto_deleting);
   if (ch->table)
-  {
-    struct rtable_adata rad = (struct rtable_adata){.table = h->table};
-    eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_ADATA(&ea_gen_rtable, 0, &rad, sizeof(rtable *));
-  }
+    eattrs.a[eattrs.l.count++] = EA_LITERAL_STORE_PTR(&ea_rtable, 0, &ch->table);
   if (ch->proto->proto == &proto_bgp && ch != ch->proto->mpls_channel)
   {
     struct bgp_channel *bc = (struct bgp_channel *) ch;

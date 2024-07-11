@@ -52,6 +52,7 @@
 #include "proto/bgp/bgp.h"
 #include "sysdep/unix/unix.h"
 #include "sysdep/unix/io-loop.h"
+#include "conf/conf.h"
 
 
 #ifdef PATH_MAX
@@ -376,7 +377,7 @@ static void
 mrt_peer_table_dump(struct mrt_table_dump_state *s)
 {
   mrt_init_message(&s->buf, MRT_TABLE_DUMP_V2, MRT_PEER_INDEX_TABLE);
-  mrt_peer_table_header(s, config->router_id, get_tab(s)->name);
+  mrt_peer_table_header(s, OBSREF_GET(config)->router_id, get_tab(s)->name);
 
   /* 0 is fake peer for non-BGP routes */
   mrt_peer_table_entry(s, 0, 0, IPA_NONE);
@@ -394,7 +395,7 @@ mrt_peer_table_dump(struct mrt_table_dump_state *s)
       continue;
     }
     rcu_read_unlock();
-    struct protocol **type = (struct protocol **)ea_get_adata(eal, &ea_protocol_type)->data;
+    struct protocol **type = (struct protocol **)ea_get_ptr(eal, &ea_protocol_type, 0);
     int state = ea_get_int(eal, &ea_state, 0);
     if ((*type == &proto_bgp) && (state != PS_DOWN))
     {
@@ -408,6 +409,7 @@ mrt_peer_table_dump(struct mrt_table_dump_state *s)
 
   /* Fix Peer Count */
   put_u16(s->buf.start + s->peer_count_offset, s->peer_count);
+  log("peer count %i", s->peer_count);
 
   mrt_dump_message(&s->buf, s->fd);
 }
@@ -603,8 +605,8 @@ mrt_table_dump_init(pool *pp)
   mrt_buffer_init(&s->buf, pool, 2 * MRT_ATTR_BUFFER_SIZE);
 
   /* We lock the current config as we may reference it indirectly by filter */
-  s->config = config;
-  config_add_obstacle(s->config);
+
+  OBSREF_SET(s->config, OBSREF_GET(config));
 
   s->fd = -1;
 
@@ -614,7 +616,7 @@ mrt_table_dump_init(pool *pp)
 static void
 mrt_table_dump_free(struct mrt_table_dump_state *s)
 {
-  config_del_obstacle(s->config);
+  OBSREF_CLEAR(s->config);
 
   rp_free(s->pool);
 }
@@ -841,7 +843,7 @@ mrt_dump_bgp_message(struct mrt_bgp_data *d)
   mrt_init_message(b, MRT_BGP4MP, subtypes[d->as4 + 4*d->add_path]);
   mrt_bgp_header(b, d);
   mrt_put_data(b, d->message, d->msg_len);
-  mrt_dump_message(b, rf_fileno(config->mrtdump_file));
+  mrt_dump_message(b, rf_fileno(OBSREF_GET(config)->mrtdump_file));
 }
 
 void
@@ -861,7 +863,7 @@ mrt_dump_bgp_state_change(struct mrt_bgp_data *d)
   mrt_bgp_header(b, d);
   mrt_put_u16(b, states[d->old_state]);
   mrt_put_u16(b, states[d->new_state]);
-  mrt_dump_message(b, rf_fileno(config->mrtdump_file));
+  mrt_dump_message(b, rf_fileno(OBSREF_GET(config)->mrtdump_file));
 }
 
 

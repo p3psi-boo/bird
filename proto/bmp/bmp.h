@@ -108,7 +108,7 @@ struct bmp_table {
  * bmp_peer_up - send notification that BGP peer connection is established
  */
 void
-bmp_peer_up(struct bgp_proto *bgp,
+bmp_peer_up(struct ea_list *bgp,
 	    const byte *tx_open_msg, uint tx_open_length,
 	    const byte *rx_open_msg, uint rx_open_length);
 

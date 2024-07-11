@@ -219,7 +219,7 @@ static void bmp_sock_err(sock *sk, int err);
 static void bmp_close_socket(struct bmp_proto *p);
 
 static void
-bmp_send_peer_up_notif_msg(struct bmp_proto *p, const ea_list *bgp,
+bmp_send_peer_up_notif_msg(struct bmp_proto *p, ea_list *bgp,
   const byte *tx_data, const size_t tx_data_size,
   const byte *rx_data, const size_t rx_data_size);
 
@@ -551,7 +551,7 @@ static inline bool bmp_stream_policy(struct bmp_stream *bs)
 { return !!(bs->key & BMP_STREAM_KEY_POLICY); }
 
 static struct bmp_stream *
-bmp_find_stream(struct bmp_proto *p, ea_list *bgp_attr, u32 afi, bool policy)
+bmp_find_stream(struct bmp_proto *p, struct bgp_proto *bgp_attr, u32 afi, bool policy)
 {
   return HASH_FIND(p->stream_map, HASH_STREAM, (void*)bgp_attr, bmp_stream_key(afi, policy));
 }
@@ -649,7 +649,7 @@ bmp_peer_up_(struct bmp_proto *p, ea_list *bgp_attr, bool sync,
   if (bp)
     return;
 
-  const char *name = ea_find(bgp_attr, &ea_name)->u.ad->data;
+  const char *name = ea_get_adata(bgp_attr, &ea_name)->data;
   TRACE(D_STATES, "Peer up for %s", name);
 
   bp = bmp_add_peer(p, bgp_attr);
@@ -685,7 +685,7 @@ bmp_peer_up(ea_list *bgp,
 static void
 bmp_peer_init(struct bmp_proto *p, ea_list *bgp_attr)
 {
-  struct journal_bgp_conn *conn = (struct journal_bgp_conn *) ea_find(bgp_attr, &ea_bgp_conn)->u.ad->data;
+  const struct bgp_conn *conn = (const struct bgp_conn *) ea_get_ptr(bgp_attr, &ea_bgp_conn, 0);
 
   if (!conn || (conn->state != BS_ESTABLISHED) ||
       !conn->local_open_msg || !conn->remote_open_msg)
@@ -698,28 +698,31 @@ bmp_peer_init(struct bmp_proto *p, ea_list *bgp_attr)
 
 
 static const struct birdsock *
-bmp_get_birdsock(const struct bgp_proto *bgp)
+bmp_get_birdsock(ea_list *bgp)
 {
-  if (bgp->conn && bgp->conn->sk)
-    return bgp->conn->sk;
+  struct bgp_conn *conn = (struct bgp_conn *) ea_get_ptr(bgp, &ea_bgp_conn, 0);
+  if (conn && conn->sk)
+    return conn->sk;
 
   return NULL;
 }
 
 static const struct birdsock *
-bmp_get_birdsock_ext(const struct bgp_proto *bgp)
+bmp_get_birdsock_ext(ea_list *bgp)
 {
   const struct birdsock *sk = bmp_get_birdsock(bgp);
   if (sk != NULL)
     return sk;
 
-  if (bgp->incoming_conn.sk)
+  struct bgp_conn *in_conn = (struct bgp_conn *) ea_get_ptr(bgp, &ea_bgp_in_conn, 0);
+  struct bgp_conn *out_conn = (struct bgp_conn *) ea_get_ptr(bgp, &ea_bgp_out_conn, 0);
+  if (in_conn->sk)
   {
-    sk = bgp->incoming_conn.sk;
+    sk = in_conn->sk;
   }
-  else if (bgp->outgoing_conn.sk)
+  else if (out_conn->sk)
   {
-    sk = bgp->outgoing_conn.sk;
+    sk = out_conn->sk;
   }
 
   return sk;
@@ -754,16 +757,19 @@ bmp_get_bgp_remote_caps_ext(const struct bgp_proto *bgp)
 }
 
 static bool
-bmp_is_peer_global_instance(const struct bgp_proto *bgp)
+bmp_is_peer_global_instance(ea_list *bgp)
 {
-  return (bgp->cf->peer_type != BGP_PT_EXTERNAL &&
-            bgp->cf->peer_type != BGP_PT_INTERNAL)
-              ? (bgp->local_as != bgp->remote_as)
-              : (bgp->cf->peer_type == BGP_PT_EXTERNAL);
+  int peer_type = ea_get_int(bgp, &ea_bgp_peer_type, 0);
+  int local_as = ea_get_int(bgp, &ea_bgp_loc_as, 0);
+  int remote_as = ea_get_int(bgp, &ea_bgp_rem_as, 0);
+  return (peer_type != BGP_PT_EXTERNAL &&
+            peer_type != BGP_PT_INTERNAL)
+              ? (local_as != remote_as)
+              : (peer_type == BGP_PT_EXTERNAL);
 }
 
 static void
-bmp_send_peer_up_notif_msg(struct bmp_proto *p, const struct bgp_proto *bgp,
+bmp_send_peer_up_notif_msg(struct bmp_proto *p, ea_list *bgp,
   const byte *tx_data, const size_t tx_data_size,
   const byte *rx_data, const size_t rx_data_size)
 {
@@ -775,10 +781,12 @@ bmp_send_peer_up_notif_msg(struct bmp_proto *p, const struct bgp_proto *bgp,
     "[BMP] No BGP socket"
   );
 
+  const int rem_as = ea_get_int(bgp, &ea_bgp_rem_as, 0);
+  const int rem_id = ea_get_int(bgp, &ea_bgp_rem_id, 0);
   const bool is_global_instance_peer = bmp_is_peer_global_instance(bgp);
   buffer payload = bmp_buffer_alloc(p->buffer_mpool, DEFAULT_MEM_BLOCK_SIZE);
   bmp_peer_up_notif_msg_serialize(&payload, is_global_instance_peer,
-    bgp->remote_as, bgp->remote_id, 1,
+    rem_as, rem_id, 1,
     sk->saddr, sk->daddr, sk->sport, sk->dport, tx_data, tx_data_size,
     rx_data, rx_data_size);
   bmp_schedule_tx_packet(p, bmp_buffer_data(&payload), bmp_buffer_pos(&payload));
@@ -796,10 +804,10 @@ bmp_route_monitor_put_update(struct bmp_proto *p, struct bmp_stream *bs, const b
   add_tail(&p->update_msg_queue, &upd_msg->n);
 
   /* Save some metadata */
-  struct bgp_proto *bgp = bs->bgp;
-  upd_msg->remote_as = bgp->remote_as;
-  upd_msg->remote_id = bgp->remote_id;
-  upd_msg->remote_ip = bgp->remote_ip;
+  ea_list *bgp = bs->bgp;
+  upd_msg->remote_as = ea_get_int(bgp, &ea_bgp_rem_as, 0);
+  upd_msg->remote_id = ea_get_int(bgp, &ea_bgp_rem_id, 0);
+  upd_msg->remote_ip = ea_get_ip(bgp, &ea_bgp_rem_ip, IPA_NONE);
   upd_msg->timestamp = timestamp;
   upd_msg->global_peer = bmp_is_peer_global_instance(bgp);
   upd_msg->policy = bmp_stream_policy(bs);
@@ -810,11 +818,11 @@ bmp_route_monitor_put_update(struct bmp_proto *p, struct bmp_stream *bs, const b
 }
 
 static void
-bmp_route_monitor_notify(struct bmp_proto *p, struct bmp_stream *bs,
+bmp_route_monitor_notify(struct bmp_proto *p, struct bgp_proto *bgp_p, struct bmp_stream *bs,
 			 const net_addr *n, const struct rte *new, const struct rte_src *src)
 {
   byte buf[BGP_MAX_EXT_MSG_LENGTH];
-  byte *end = bgp_bmp_encode_rte(bs->sender, buf, n, new, src);
+  byte *end = bgp_bmp_encode_rte(bs->sender, bgp_p, buf, n, new, src);
 
   btime delta_t = new ? current_time() - new->lastmod : 0;
   btime timestamp = current_real_time() - delta_t;
@@ -860,10 +868,10 @@ bmp_route_monitor_commit(void *p_)
 static void
 bmp_route_monitor_end_of_rib(struct bmp_proto *p, struct bmp_stream *bs)
 {
-  TRACE(D_PACKETS, "Sending END-OF-RIB for %s.%s", bs->bgp->p.name, ea_get_adata(bs->sender, &ea_name)->adata);
+  TRACE(D_PACKETS, "Sending END-OF-RIB for %s.%s", ea_get_adata(bs->bgp, &ea_name)->data, ea_get_adata(bs->sender, &ea_name)->data);
 
   byte rx_end_payload[DEFAULT_MEM_BLOCK_SIZE];
-  byte *pos = bgp_create_end_mark_(bs->sender, rx_end_payload + BGP_HEADER_LENGTH);
+  byte *pos = bgp_create_end_mark_ea_(bs->sender, rx_end_payload + BGP_HEADER_LENGTH);
   memset(rx_end_payload + BGP_MSG_HDR_MARKER_POS, 0xff,
 	 BGP_MSG_HDR_MARKER_SIZE); // BGP UPDATE MSG marker
   put_u16(rx_end_payload + BGP_MSG_HDR_LENGTH_POS, pos - rx_end_payload);
@@ -879,7 +887,7 @@ bmp_send_peer_down_notif_msg(struct bmp_proto *p, const struct bgp_proto *bgp,
   ASSERT(p->started);
 
   const struct bgp_caps *remote_caps = bmp_get_bgp_remote_caps_ext(bgp);
-  bool is_global_instance_peer = bmp_is_peer_global_instance(bgp);
+  bool is_global_instance_peer = bmp_is_peer_global_instance(proto_state_table->attrs[bgp->p.id]);
   buffer payload
     = bmp_buffer_alloc(p->buffer_mpool, DEFAULT_MEM_BLOCK_SIZE);
   bmp_peer_down_notif_msg_serialize(&payload, is_global_instance_peer,
@@ -898,7 +906,7 @@ bmp_peer_down_(struct bmp_proto *p, const struct bgp_proto *bgp,
   if (!p->started)
     return;
 
-  struct bmp_peer *bp = bmp_find_peer(p, bgp);
+  struct bmp_peer *bp = bmp_find_peer(p, proto_state_table->attrs[bgp->p.id]);
   if (!bp)
     return;
 
@@ -1004,7 +1012,7 @@ bmp_preexport(struct channel *C UNUSED, rte *e)
 
 static void
 bmp_rt_notify(struct proto *P, struct channel *c, const net_addr *net,
-		struct rte *new, struct rte *old)
+		struct rte *new, const struct rte *old)
 {
   struct bmp_proto *p = (void *) P;
 
@@ -1023,7 +1031,7 @@ bmp_rt_notify(struct proto *P, struct channel *c, const net_addr *net,
   if (!bs)
     return;
 
-  bmp_route_monitor_notify(p, bs, net, new, (new ?: old)->src);
+  bmp_route_monitor_notify(p, bgp, bs, net, new, (new ?: old)->src);
 }
 
 static void
@@ -1080,16 +1088,16 @@ bmp_startup(struct bmp_proto *p)
   bmp_buffer_free(&payload);
 
   /* Send Peer Up messages */
-  for (int i = 0; i < bgp_attributes->length; i++)
+  for (u32 i = 0; i < proto_state_table->length; i++)
   {
-    ea_list *bgp_attr = bgp_attributes->attrs[i];
-    if (bgp_attr == NULL)
+    ea_list *proto_attr = proto_state_table->attrs[i];
+    if (proto_attr == NULL)
       continue;
-    struct protocol *proto = (struct protocol *) ea_find(bgp_attr, &ea_protocol_type)->u.ad->data;
-    const int state = ea_find(bgp_attr, &ea_state)->u.i;
+    struct protocol *proto = (struct protocol *) ea_get_ptr(proto_attr, &ea_protocol_type, 0);
+    const int state = ea_get_int(proto_attr, &ea_state, 0);
     if (proto != &proto_bgp || state != PS_UP)
       continue;
-    bmp_peer_init(p, bgp_attr);
+    bmp_peer_init(p, proto_attr);
   }
   /*struct proto *peer;
   WALK_LIST(peer, proto_list)
@@ -1151,7 +1159,7 @@ bmp_connect(struct bmp_proto *p)
 
   TRACE(D_EVENTS, "Connecting to %I port %u", sk->daddr, sk->dport);
 
-  int rc = sk_open(sk);
+  int rc = sk_open(sk, p->p.loop);
 
   if (rc < 0)
     sk_log_error(sk, p->p.name);
@@ -1243,7 +1251,7 @@ bmp_init(struct proto_config *CF)
 
   P->rt_notify = bmp_rt_notify;
   P->preexport = bmp_preexport;
-  P->feed_end = bmp_feed_end;
+  //P->feed_end = bmp_feed_end; I am confused. It looks like feed_end and bmp_feed_end exist only here
 
   p->cf = cf;
   p->local_addr = cf->local_addr;
@@ -1266,10 +1274,10 @@ bmp_start(struct proto *P)
 {
   struct bmp_proto *p = (void *) P;
 
-  p->buffer_mpool = rp_new(P->pool, "BMP Buffer");
-  p->map_mem_pool = rp_new(P->pool, "BMP Map");
-  p->tx_mem_pool = rp_new(P->pool, "BMP Tx");
-  p->update_msg_mem_pool = rp_new(P->pool, "BMP Update");
+  p->buffer_mpool = rp_new(P->pool, proto_domain(&p->p), "BMP Buffer");
+  p->map_mem_pool = rp_new(P->pool, proto_domain(&p->p), "BMP Map");
+  p->tx_mem_pool = rp_new(P->pool, proto_domain(&p->p), "BMP Tx");
+  p->update_msg_mem_pool = rp_new(P->pool, proto_domain(&p->p), "BMP Update");
   p->tx_ev = ev_new_init(p->p.pool, bmp_fire_tx, p);
   p->update_ev = ev_new_init(p->p.pool, bmp_route_monitor_commit, p);
   p->connect_retry_timer = tm_new_init(p->p.pool, bmp_connection_retry, p, 0, 0);
@@ -1371,7 +1379,7 @@ bmp_show_proto_info(struct proto *P)
 struct protocol proto_bmp = {
   .name = "BMP",
   .template = "bmp%d",
-  .class = PROTOCOL_BMP,
+  //.class = PROTOCOL_BMP, looks like there are no classes for protocols anymore
   .proto_size = sizeof(struct bmp_proto),
   .config_size = sizeof(struct bmp_config),
   .postconfig = bmp_postconfig,

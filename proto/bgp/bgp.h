@@ -290,15 +290,6 @@ struct bgp_stats {
   uint fsm_established_transitions;
 };
 
-struct journal_bgp_conn {
-  u8 state;
-
-  byte *local_open_msg;
-  byte *remote_open_msg;
-  uint local_open_length;
-  uint remote_open_length;
-};
-
 struct bgp_conn {
   struct bgp_proto *bgp;
   struct birdsock *sk;
@@ -327,6 +318,13 @@ struct bgp_conn {
   byte *notify_data;
 
   uint hold_time, keepalive_time, send_hold_time;	/* Times calculated from my and neighbor's requirements */
+};
+
+
+struct journal_bgp_conn {
+  struct bgp_conn *conn;
+  struct bgp_conn outgoing_conn;
+  struct bgp_conn incoming_conn;
 };
 
 struct bgp_listen_request {
@@ -690,7 +688,8 @@ static inline struct bgp_proto *bgp_rte_proto(const rte *rte)
     SKIP_BACK(struct bgp_proto, p.sources, rte->src->owner) : NULL;
 }
 
-byte * bgp_bmp_encode_rte(struct bgp_channel *c, byte *buf, const net_addr *n, const struct rte *new, const struct rte_src *src);
+byte * bgp_bmp_encode_rte(ea_list *c, struct bgp_proto *bgp_p, byte *buf, const net_addr *n,
+		   const struct rte *new, const struct rte_src *src);
 
 #define BGP_AIGP_METRIC		1
 #define BGP_AIGP_MAX		U64(0xffffffffffffffff)
@@ -726,6 +725,7 @@ void bgp_log_error(struct bgp_proto *p, u8 class, char *msg, unsigned code, unsi
 
 void bgp_update_next_hop(struct bgp_export_state *s, eattr *a, ea_list **to);
 byte *bgp_create_end_mark_(struct bgp_channel *c, byte *buf);
+byte *bgp_create_end_mark_ea_(ea_list *c, byte *buf);
 
 
 /* Packet types */

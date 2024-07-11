@@ -678,6 +678,9 @@ bgp_conn_enter_established_state(struct bgp_conn *conn)
   conn->sk->fast_rx = 0;
 
   p->conn = conn;
+  ea_list *eal = proto_state_table->attrs[p->p.id];
+  ea_set_attr(&eal, EA_LITERAL_STORE_PTR(&ea_bgp_conn, 0, p->conn));
+  proto_journal_state_push(eal, &p->p);
   p->last_error_class = 0;
   p->last_error_code = 0;
 
@@ -795,7 +798,7 @@ bgp_conn_enter_established_state(struct bgp_conn *conn)
   proto_notify_state(&p->p, PS_UP);
 
 #ifdef CONFIG_BMP
-  bmp_peer_up(p, conn->local_open_msg, conn->local_open_length,
+  bmp_peer_up(proto_state_table->attrs[p->p.id], conn->local_open_msg, conn->local_open_length,
 	      conn->remote_open_msg, conn->remote_open_length);
 #endif
 }
@@ -2370,6 +2373,9 @@ bgp_reconfigure(struct proto *P, struct proto_config *CF)
 
   /* We should update our copy of configuration ptr as old configuration will be freed */
   p->cf = new;
+  ea_list *eal = proto_state_table->attrs[p->p.id];
+  ea_set_attr(&eal, EA_LITERAL_EMBEDDED(&ea_bgp_peer_type, 0, p->cf->peer_type));
+  proto_journal_state_push(eal, &p->p);
 
   /* Check whether existing connections are compatible with required capabilities */
   struct bgp_conn *ci = &p->incoming_conn;
@@ -2581,16 +2587,14 @@ bgp_state_to_eattr(struct proto *P, ea_list *l, eattr *attributes)
   attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_rem_id, 0, p->remote_id);
   attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_rem_as, 0, p->remote_as);
   attributes[l->count++] = EA_LITERAL_STORE_ADATA(&ea_bgp_rem_ip, 0, &p->remote_ip, sizeof(ip_addr));
+  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_peer_type, 0, p->cf->peer_type);
+  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_loc_as, 0, p->local_as);
+  attributes[l->count++] = EA_LITERAL_EMBEDDED(&ea_bgp_rem_as, 0, p->remote_as);
   if (p->conn)
   {
-    struct journal_bgp_conn conn = {
-      .state = p->conn->state,
-      .local_open_msg = p->conn->local_open_msg,
-      .remote_open_msg = p->conn->remote_open_msg,
-      .local_open_length = p->conn->local_open_length,
-      .remote_open_length = p->conn->remote_open_length,
-    };
-    attributes[l->count++] = EA_LITERAL_STORE_ADATA(&ea_bgp_conn, 0, &conn, sizeof(struct journal_bgp_conn));
+    attributes[l->count++] = EA_LITERAL_STORE_PTR(&ea_bgp_conn, 0, &p->conn);
+    attributes[l->count++] = EA_LITERAL_STORE_PTR(&ea_bgp_in_conn, 0, &p->incoming_conn);
+    attributes[l->count++] = EA_LITERAL_STORE_PTR(&ea_bgp_out_conn, 0, &p->outgoing_conn);
   }
 }
 

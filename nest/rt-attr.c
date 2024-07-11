@@ -171,15 +171,15 @@ struct ea_class ea_gen_hostentry_version = {
 static void
 ea_gen_rtable_stored(const eattr *ea)
 {
-  struct rtable_adata *had = (struct rtable_adata *) ea->u.ptr;
-  rt_lock_table(had->table);
+  rtable *r = (rtable *) ea->u.v_ptr;
+  rt_lock_table(r);
 }
 
 static void
 ea_gen_rtable_freed(const eattr *ea)
 {
-  struct rtable_adata *had = (struct rtable_adata *) ea->u.ptr;
-  rt_unlock_table(had->table);
+  rtable *r = (rtable *) ea->u.v_ptr;
+  rt_unlock_table(r);
 }
 
 struct ea_class ea_gen_rtable = {
@@ -1859,7 +1859,7 @@ struct ea_class ea_protocol_name = {
 
 struct ea_class ea_protocol_type = {
   .name = "proto_protocol_type",
-  .type = T_POINTER,
+  .type = T_PTR,
 };
 
 struct ea_class ea_table = {
@@ -1912,6 +1912,11 @@ struct ea_class ea_bgp_rem_as = {
   .type = T_INT,
 };
 
+struct ea_class ea_bgp_loc_as = {
+  .name = "proto_bgp_loc_as",
+  .type = T_INT,
+};
+
 struct ea_class ea_bgp_rem_ip = {
   .name = "proto_bgp_rem_ip",
   .type = T_IP,
@@ -1919,12 +1924,32 @@ struct ea_class ea_bgp_rem_ip = {
 
 struct ea_class ea_bgp_conn = {
   .name = "proto_bgp_rem_conn",
-  .type = T_BGP_CONN,
+  .type = T_PTR,
+};
+
+struct ea_class ea_bgp_in_conn = {
+  .name = "proto_bgp_rem_in_conn",
+  .type = T_PTR,
+};
+
+struct ea_class ea_bgp_out_conn = {
+  .name = "proto_bgp_rem_out_conn",
+  .type = T_PTR,
 };
 
 struct ea_class ea_bgp_afi = {
   .name = "bgp_afi",
   .type = T_INT,
+};
+
+struct ea_class ea_bgp_peer_type = {
+  .name = "bgp_peer_type",
+  .type = T_INT,
+};
+
+struct ea_class ea_rtable = {
+  .name = "rtable",
+  .type = T_PTR,
 };
 
 /**
@@ -1984,11 +2009,14 @@ rta_init(void)
   /* Protocol bgp attributes */
   ea_register_init(&ea_bgp_rem_id);
   ea_register_init(&ea_bgp_rem_as);
+  ea_register_init(&ea_bgp_loc_as);
   ea_register_init(&ea_bgp_rem_ip);
   ea_register_init(&ea_bgp_conn);
+  ea_register_init(&ea_bgp_in_conn);
+  ea_register_init(&ea_bgp_out_conn);
   ea_register_init(&ea_rtable);
+  ea_register_init(&ea_bgp_peer_type);
   ea_register_init(&ea_bgp_afi);
-  ea_register_init(&ea_gen_rtable);
 }
 
 /*

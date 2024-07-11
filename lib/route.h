@@ -370,7 +370,7 @@ void ea_list_copy(ea_list *dest, ea_list *src, uint size);
 
 #define EA_LITERAL_STORE_PTR(_class, _flags, _ptr) ({ \
     btype _type = (_class)->type; \
-    ASSERT_DIE(!(_type == T_PTR)); \
+    ASSERT_DIE(_type == T_PTR); \
     EA_LITERAL_GENERIC((_class)->id, _type, _flags, .u.v_ptr = _ptr); \
     })
 
@@ -469,9 +469,9 @@ extern struct ea_class ea_gen_mpls_label,
 /* protocol journal attributes */
 extern struct ea_class ea_name, ea_protocol_name, ea_protocol_type, ea_table,
        ea_state, ea_old_state, ea_last_modified, ea_info, ea_proto_id,
-       ea_channel_id, ea_deleted, ea_bgp_conn, ea_rtable, ea_bgp_afi;
+       ea_channel_id, ea_deleted, ea_bgp_conn, ea_bgp_in_conn, ea_bgp_out_conn, ea_rtable, ea_bgp_afi;
 /* bgp protocol journal attributes */
-extern struct ea_class ea_bgp_rem_id, ea_bgp_rem_as, ea_bgp_rem_ip;
+extern struct ea_class ea_bgp_rem_id, ea_bgp_rem_as, ea_bgp_loc_as, ea_bgp_rem_ip, ea_bgp_peer_type;
 
 /* Source: An old method to devise the route source protocol and kind.
  * To be superseded in a near future by something more informative. */

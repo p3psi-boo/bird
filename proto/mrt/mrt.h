@@ -55,7 +55,7 @@ struct mrt_peer_entry {
 struct mrt_table_dump_state {
   struct mrt_proto *proto;		/* Protocol for regular MRT dumps (or NULL) */
   struct cli *cli;			/* CLI for irregular MRT dumps (or NULL) */
-  struct config *config;		/* Config valid during start of dump, locked */
+  config_ref config;		/* Config valid during start of dump, locked */
 
 					/* Configuration information */
   const char *table_expr;		/* Wildcard for table name (or NULL) */

@@ -308,7 +308,6 @@ if test "$enable_mpls_kernel" != no ; then
   fi
 fi
 
-<<<<<<< HEAD
 BIRD_CHECK_CLOCK(CLOCK_MONOTONIC)
 if test "$bird_cv_clock_CLOCK_MONOTONIC" != yes ; then
   AC_MSG_ERROR([Monotonic clock not supported])
